@@ -72,7 +72,7 @@ SENSORS: tuple[DroneMobileSensorDescription, ...] = (
         key="interior_temperature",
         translation_key="interior_temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
-        native_unit_of_measurement=UnitOfTemperature.FAHRENHEIT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda status: status.interior_temperature,
     ),
