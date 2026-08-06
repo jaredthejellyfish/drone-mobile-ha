@@ -1,0 +1,76 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This DroneMobile account is already configured.",
+      "mfa_session_expired": "The MFA session expired. Start setup again.",
+      "reauth_entry_missing": "The DroneMobile account is no longer available."
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to DroneMobile.",
+      "invalid_auth": "The email address or password is incorrect.",
+      "invalid_mfa": "The verification code is invalid or expired.",
+      "unknown": "Unexpected error. Check the logs for details."
+    },
+    "step": {
+      "mfa": {
+        "data": {
+          "mfa_code": "Verification code"
+        },
+        "description": "Enter the code requested by DroneMobile ({challenge}).",
+        "title": "Two-factor authentication"
+      },
+      "reauth_confirm": {
+        "data": {
+          "password": "Password"
+        },
+        "description": "Enter the current password for {username}.",
+        "title": "Reconnect DroneMobile"
+      },
+      "user": {
+        "data": {
+          "password": "Password",
+          "username": "Email address"
+        },
+        "description": "Sign in with your DroneMobile account.",
+        "title": "Connect DroneMobile"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "running": {"name": "Running"}
+    },
+    "button": {
+      "aux1": {"name": "Auxiliary 1"},
+      "aux2": {"name": "Auxiliary 2"},
+      "panic_off": {"name": "Stop panic"},
+      "panic_on": {"name": "Start panic"},
+      "request_location": {"name": "Request location"},
+      "request_status": {"name": "Request status"},
+      "trunk": {"name": "Open trunk"}
+    },
+    "device_tracker": {
+      "location": {"name": "Location"}
+    },
+    "lock": {
+      "doors": {"name": "Doors"}
+    },
+    "sensor": {
+      "battery_percent": {"name": "Battery"},
+      "battery_voltage": {"name": "Battery voltage"},
+      "fuel_level": {"name": "Fuel level"},
+      "interior_temperature": {"name": "Interior temperature"},
+      "last_updated": {"name": "Last updated"},
+      "odometer": {"name": "Odometer"}
+    },
+    "switch": {
+      "engine": {"name": "Engine"}
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {"message": "DroneMobile authentication failed. Reauthenticate the integration and try again."},
+    "command_failed": {"message": "DroneMobile command failed: {error}"},
+    "invalid_command": {"message": "This DroneMobile command is not supported."},
+    "vehicle_not_found": {"message": "The DroneMobile vehicle was not found."}
+  }
+}

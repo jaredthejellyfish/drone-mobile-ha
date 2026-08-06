@@ -1,0 +1,14 @@
+{
+  "domain": "drone_mobile",
+  "name": "DroneMobile",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/bjhiltbrand/drone_mobile_python",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/bjhiltbrand/drone_mobile_python/issues",
+  "loggers": ["drone_mobile"],
+  "requirements": ["drone_mobile==0.4.1"],
+  "version": "0.1.0"
+}
+
