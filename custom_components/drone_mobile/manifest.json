@@ -1,14 +1,13 @@
 {
   "domain": "drone_mobile",
   "name": "DroneMobile",
-  "codeowners": [],
+  "codeowners": ["@jaredthejellyfish"],
   "config_flow": true,
-  "documentation": "https://github.com/bjhiltbrand/drone_mobile_python",
+  "documentation": "https://github.com/jaredthejellyfish/drone-mobile-ha",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/bjhiltbrand/drone_mobile_python/issues",
+  "issue_tracker": "https://github.com/jaredthejellyfish/drone-mobile-ha/issues",
   "loggers": ["drone_mobile"],
   "requirements": ["drone_mobile==0.4.1"],
   "version": "0.1.0"
 }
-

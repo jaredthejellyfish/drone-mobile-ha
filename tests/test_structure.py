@@ -22,6 +22,9 @@ def test_manifest_is_hacs_compatible() -> None:
     assert manifest["iot_class"] == "cloud_polling"
     assert manifest["requirements"] == ["drone_mobile==0.4.1"]
     assert manifest["version"] == "0.1.0"
+    assert manifest["codeowners"] == ["@jaredthejellyfish"]
+    assert manifest["documentation"].endswith("/jaredthejellyfish/drone-mobile-ha")
+    assert manifest["issue_tracker"].endswith("/drone-mobile-ha/issues")
 
 
 def test_all_platforms_import_against_current_home_assistant() -> None:

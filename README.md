@@ -28,11 +28,12 @@ Assistant's event loop so a slow cloud request does not block Home Assistant.
 
 ## Install with HACS
 
-Until this repository is included in HACS defaults:
+Add this repository to HACS as a custom repository:
 
 1. Open HACS and choose **Integrations**.
 2. Open the menu and choose **Custom repositories**.
-3. Enter this repository's GitHub URL and select **Integration**.
+3. Enter `https://github.com/jaredthejellyfish/drone-mobile-ha` and select
+   **Integration**.
 4. Download **DroneMobile** and restart Home Assistant.
 
 For a manual installation, copy `custom_components/drone_mobile` into the
@@ -68,19 +69,14 @@ drone-mobile-demo you@example.com list
 Omit the password from the command so the CLI prompts without exposing it in
 shell history or the process list.
 
-## Publishing checklist
+## Project links
 
-Before publishing this as a HACS repository:
-
-- update `documentation`, `issue_tracker`, and `codeowners` in
-  `custom_components/drone_mobile/manifest.json` to this repository;
-- add the repository description and Home Assistant/HACS GitHub topics;
-- add the integration to the Home Assistant brands repository;
-- publish a semantic-versioned GitHub release matching the manifest version.
+- [Documentation and source](https://github.com/jaredthejellyfish/drone-mobile-ha)
+- [Issue tracker](https://github.com/jaredthejellyfish/drone-mobile-ha/issues)
+- [DroneMobile Python package](https://pypi.org/project/drone-mobile/)
 
 ## Disclaimer
 
 This project is unofficial and is not affiliated with or endorsed by
 DroneMobile, Firstech, or Compustar. The underlying API can change without
 notice.
-
