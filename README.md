@@ -23,8 +23,11 @@ Each vehicle is represented as one Home Assistant device with:
 - interactive SMS or authenticator-app MFA during setup;
 - account-specific token storage inside Home Assistant's `.storage` directory.
 
-Vehicle data is polled every two minutes. API calls run outside Home
-Assistant's event loop so a slow cloud request does not block Home Assistant.
+Vehicle data is normally polled every two minutes. After a start, stop, lock,
+or unlock command, the integration refreshes immediately. It only retries at
+5, 15, and 30 seconds while DroneMobile still reports a state that does not
+match the command. API calls run outside Home Assistant's event loop so a slow
+cloud request does not block Home Assistant.
 
 ## Install with HACS
 

@@ -10,6 +10,7 @@ from custom_components.drone_mobile.binary_sensor import (
     DroneMobileRunningBinarySensor,
 )
 from custom_components.drone_mobile.coordinator import (
+    COMMAND_EXPECTATIONS,
     DroneMobileCoordinator,
     DroneMobileVehicleData,
 )
@@ -69,3 +70,16 @@ def test_vehicle_tracker_and_device_info() -> None:
     assert tracker.device_info["manufacturer"] == "Firstech"
     assert tracker.device_info["model"] == "Toyota RAV4"
     assert tracker.device_info["serial_number"] == "TESTVIN"
+
+
+def test_command_expectations_match_refreshed_state() -> None:
+    """Only retry commands whose observable result has not appeared yet."""
+    coordinator = make_coordinator()
+
+    matches = DroneMobileCoordinator._command_state_matches
+    assert matches(coordinator, VEHICLE_ID, "start") is True
+    assert matches(coordinator, VEHICLE_ID, "stop") is False
+    assert matches(coordinator, VEHICLE_ID, "lock") is True
+    assert matches(coordinator, VEHICLE_ID, "unlock") is False
+    assert matches(coordinator, VEHICLE_ID, "trunk") is True
+    assert set(COMMAND_EXPECTATIONS) == {"start", "stop", "lock", "unlock"}

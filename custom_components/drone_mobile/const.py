@@ -9,6 +9,7 @@ DOMAIN = "drone_mobile"
 CONF_MFA_CODE = "mfa_code"
 
 DEFAULT_UPDATE_INTERVAL = timedelta(minutes=2)
+COMMAND_REFRESH_RETRY_INTERVALS = (5, 10, 15)
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,

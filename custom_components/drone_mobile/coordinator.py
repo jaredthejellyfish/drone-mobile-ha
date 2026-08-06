@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryAuthFailed
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from drone_mobile import (
@@ -20,7 +22,7 @@ from drone_mobile import (
     VehicleStatus,
 )
 
-from .const import DEFAULT_UPDATE_INTERVAL, DOMAIN
+from .const import COMMAND_REFRESH_RETRY_INTERVALS, DEFAULT_UPDATE_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +41,13 @@ COMMAND_METHODS = frozenset(
         "unlock",
     }
 )
+
+COMMAND_EXPECTATIONS: dict[str, tuple[str, bool]] = {
+    "start": ("is_running", True),
+    "stop": ("is_running", False),
+    "lock": ("is_locked", True),
+    "unlock": ("is_locked", False),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +76,55 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
             update_interval=DEFAULT_UPDATE_INTERVAL,
         )
         self.client = client
+        self._command_refresh_cancels: dict[str, Callable[[], None]] = {}
+
+    def _cancel_command_refreshes(self, vehicle_id: str | None = None) -> None:
+        """Cancel delayed command refreshes for one or all vehicles."""
+        if vehicle_id is not None:
+            if cancel := self._command_refresh_cancels.pop(vehicle_id, None):
+                cancel()
+            return
+
+        for cancel in self._command_refresh_cancels.values():
+            cancel()
+        self._command_refresh_cancels.clear()
+
+    def _command_state_matches(self, vehicle_id: str, method: str) -> bool:
+        """Return whether refreshed data matches a command's expected result."""
+        expectation = COMMAND_EXPECTATIONS.get(method)
+        if expectation is None:
+            return True
+        vehicle_data = self.data.get(vehicle_id)
+        if vehicle_data is None:
+            return False
+        attribute, expected = expectation
+        return getattr(vehicle_data.status, attribute) is expected
+
+    def _schedule_command_refreshes(self, vehicle_id: str, method: str) -> None:
+        """Retry refreshes until data matches the command's expected result."""
+        self._cancel_command_refreshes(vehicle_id)
+        intervals = iter(COMMAND_REFRESH_RETRY_INTERVALS)
+
+        async def _async_refresh(_now: object) -> None:
+            self._command_refresh_cancels.pop(vehicle_id, None)
+            await self.async_request_refresh()
+            if not self._command_state_matches(vehicle_id, method):
+                _schedule_next()
+
+        def _schedule_next() -> None:
+            if interval := next(intervals, None):
+                self._command_refresh_cancels[vehicle_id] = async_call_later(
+                    self.hass,
+                    interval,
+                    _async_refresh,
+                )
+
+        _schedule_next()
+
+    async def async_shutdown(self) -> None:
+        """Cancel pending command refreshes and shut down the coordinator."""
+        self._cancel_command_refreshes()
+        await super().async_shutdown()
 
     def _fetch_vehicles(self) -> dict[str, DroneMobileVehicleData]:
         """Fetch vehicles and statuses from the blocking client."""
@@ -130,4 +188,8 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
             )
 
         await self.async_request_refresh()
+        if self._command_state_matches(vehicle_id, method):
+            self._cancel_command_refreshes(vehicle_id)
+        else:
+            self._schedule_command_refreshes(vehicle_id, method)
         return response
