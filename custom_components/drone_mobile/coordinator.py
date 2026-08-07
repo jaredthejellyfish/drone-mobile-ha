@@ -5,14 +5,16 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from functools import partial
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryAuthFailed
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from drone_mobile import (
     AuthenticationError,
@@ -24,7 +26,14 @@ from drone_mobile import (
 )
 from drone_mobile.const import AVAILABLE_COMMANDS, DEVICE_TYPE_CONTROLLER
 
-from .const import COMMAND_REFRESH_RETRY_INTERVALS, DEFAULT_UPDATE_INTERVAL, DOMAIN
+from .const import (
+    COMMAND_REFRESH_RETRY_INTERVALS,
+    DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    LOCATION_REFRESH_DELAY,
+    LOCATION_UPDATE_INTERVAL,
+    PARKED_LOCATION_UPDATE_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -94,6 +103,102 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
         )
         self.client = client
         self._command_refresh_cancels: dict[str, Callable[[], None]] = {}
+        self._location_update_cancel: Callable[[], None] | None = None
+        self._location_refresh_cancel: Callable[[], None] | None = None
+        self._last_location_request: dict[str, datetime] = {}
+
+    def async_start_location_updates(self) -> None:
+        """Request fresh GPS locations at the configured interval."""
+        if self._location_update_cancel is not None:
+            return
+        self._location_update_cancel = async_track_time_interval(
+            self.hass,
+            self._async_update_locations,
+            LOCATION_UPDATE_INTERVAL,
+        )
+
+    def _schedule_location_refresh(self) -> None:
+        """Fetch vehicle data after a location command has propagated."""
+        if self._location_refresh_cancel is not None:
+            self._location_refresh_cancel()
+
+        async def _async_refresh(_now: object) -> None:
+            self._location_refresh_cancel = None
+            await self.async_request_refresh()
+
+        self._location_refresh_cancel = async_call_later(
+            self.hass,
+            LOCATION_REFRESH_DELAY,
+            _async_refresh,
+        )
+
+    def _location_update_due(
+        self,
+        vehicle_id: str,
+        is_running: bool,
+        now: datetime,
+    ) -> bool:
+        """Return whether a vehicle is due for an active GPS request."""
+        if is_running:
+            return True
+        last_request = self._last_location_request.get(vehicle_id)
+        return (
+            last_request is None
+            or now - last_request >= PARKED_LOCATION_UPDATE_INTERVAL
+        )
+
+    async def _async_request_vehicle_location(
+        self,
+        vehicle_data: DroneMobileVehicleData,
+        requested_at: datetime,
+    ) -> bool:
+        """Request one vehicle's location and record successful requests."""
+        try:
+            response = await self.hass.async_add_executor_job(
+                _request_location,
+                self.client,
+                vehicle_data.vehicle.device_key,
+            )
+        except AuthenticationError:
+            if self.config_entry:
+                self.config_entry.async_start_reauth_if_available(self.hass)
+            return False
+        except DroneMobileException as err:
+            _LOGGER.warning(
+                "Unable to request location for %s: %s",
+                vehicle_data.vehicle.name,
+                err,
+            )
+            return False
+
+        if not response.success:
+            _LOGGER.warning(
+                "DroneMobile rejected location request for %s: %s",
+                vehicle_data.vehicle.name,
+                response.message or "Unknown error",
+            )
+            return False
+
+        self._last_location_request[vehicle_data.vehicle.vehicle_id] = requested_at
+        return True
+
+    async def _async_update_locations(self, now: datetime) -> None:
+        """Request an updated location for every vehicle."""
+        requested = False
+        for vehicle_data in tuple(self.data.values()):
+            if not self._location_update_due(
+                vehicle_data.vehicle.vehicle_id,
+                vehicle_data.status.is_running,
+                now,
+            ):
+                continue
+            requested |= await self._async_request_vehicle_location(
+                vehicle_data,
+                now,
+            )
+
+        if requested:
+            self._schedule_location_refresh()
 
     def _cancel_command_refreshes(self, vehicle_id: str | None = None) -> None:
         """Cancel delayed command refreshes for one or all vehicles."""
@@ -141,6 +246,12 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
     async def async_shutdown(self) -> None:
         """Cancel pending command refreshes and shut down the coordinator."""
         self._cancel_command_refreshes()
+        if self._location_update_cancel is not None:
+            self._location_update_cancel()
+            self._location_update_cancel = None
+        if self._location_refresh_cancel is not None:
+            self._location_refresh_cancel()
+            self._location_refresh_cancel = None
         await super().async_shutdown()
 
     def _fetch_vehicles(self) -> dict[str, DroneMobileVehicleData]:
@@ -213,7 +324,20 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
             )
 
         await self.async_request_refresh()
-        if self._command_state_matches(vehicle_id, method):
+        if method == "get_location":
+            self._last_location_request[vehicle_id] = dt_util.utcnow()
+            self._schedule_location_refresh()
+        elif method == "start":
+            if await self._async_request_vehicle_location(
+                vehicle_data,
+                dt_util.utcnow(),
+            ):
+                self._schedule_location_refresh()
+            if self._command_state_matches(vehicle_id, method):
+                self._cancel_command_refreshes(vehicle_id)
+            else:
+                self._schedule_command_refreshes(vehicle_id, method)
+        elif self._command_state_matches(vehicle_id, method):
             self._cancel_command_refreshes(vehicle_id)
         else:
             self._schedule_command_refreshes(vehicle_id, method)

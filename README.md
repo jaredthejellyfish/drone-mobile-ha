@@ -29,6 +29,12 @@ or unlock command, the integration refreshes immediately. It only retries at
 match the command. API calls run outside Home Assistant's event loop so a slow
 cloud request does not block Home Assistant.
 
+GPS location is actively requested every five minutes while the engine is
+running and every thirty minutes while parked. A successful remote start also
+requests location immediately. After DroneMobile accepts a location request,
+the integration waits 15 seconds for propagation before fetching the updated
+coordinates.
+
 ## Install with HACS
 
 Add this repository to HACS as a custom repository:

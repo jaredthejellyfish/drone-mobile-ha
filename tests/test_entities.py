@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import asyncio
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
-from drone_mobile import Vehicle, VehicleInfo, VehicleStatus
+from drone_mobile import CommandResponse, Vehicle, VehicleInfo, VehicleStatus
 
 from custom_components.drone_mobile.binary_sensor import (
     DroneMobileRunningBinarySensor,
+)
+from custom_components.drone_mobile.const import (
+    LOCATION_UPDATE_INTERVAL,
+    PARKED_LOCATION_UPDATE_INTERVAL,
 )
 from custom_components.drone_mobile.coordinator import (
     COMMAND_EXPECTATIONS,
@@ -95,3 +102,53 @@ def test_location_uses_controller_command() -> None:
 
     assert _request_location(client, "device-key") is expected
     client.send_command.assert_called_once_with("device-key", LOCATION_COMMAND, "2")
+
+
+def test_adaptive_location_update_schedule() -> None:
+    """Running vehicles update every cycle while parked vehicles back off."""
+    now = datetime.now(UTC)
+    coordinator = SimpleNamespace(_last_location_request={})
+    is_due = DroneMobileCoordinator._location_update_due
+
+    assert is_due(coordinator, VEHICLE_ID, False, now) is True
+    coordinator._last_location_request[VEHICLE_ID] = now
+    assert is_due(coordinator, VEHICLE_ID, False, now) is False
+    assert is_due(coordinator, VEHICLE_ID, True, now) is True
+
+    later = now + PARKED_LOCATION_UPDATE_INTERVAL
+    assert is_due(coordinator, VEHICLE_ID, False, later) is True
+    assert LOCATION_UPDATE_INTERVAL == timedelta(minutes=5)
+    assert PARKED_LOCATION_UPDATE_INTERVAL == timedelta(minutes=30)
+
+
+def test_successful_location_request_records_time() -> None:
+    """Successful requests record when the vehicle was last actively located."""
+    now = datetime.now(UTC)
+    vehicle_data = make_coordinator().data[VEHICLE_ID]
+    hass = MagicMock()
+    hass.async_add_executor_job = AsyncMock(
+        return_value=CommandResponse(
+            success=True,
+            message="Location requested",
+            command=LOCATION_COMMAND,
+            device_key="device-key",
+        )
+    )
+    coordinator = SimpleNamespace(
+        hass=hass,
+        client=MagicMock(),
+        config_entry=None,
+        _last_location_request={},
+    )
+
+    success = asyncio.run(
+        DroneMobileCoordinator._async_request_vehicle_location(
+            coordinator,
+            vehicle_data,
+            now,
+        )
+    )
+
+    assert success is True
+    hass.async_add_executor_job.assert_awaited_once()
+    assert coordinator._last_location_request[VEHICLE_ID] == now
