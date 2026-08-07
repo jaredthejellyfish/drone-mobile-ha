@@ -9,6 +9,8 @@ import pytest
 from drone_mobile import InvalidCredentialsError
 
 from custom_components.drone_mobile.api import (
+    PendingAuthChallenge,
+    begin_credential_validation,
     create_client,
     token_directory,
     validate_credentials,
@@ -121,3 +123,41 @@ def test_create_client_uses_account_token_directory(tmp_path: Path) -> None:
     assert client_cls.call_args.kwargs["token_dir"] == token_directory(
         hass, "user@example.com"
     )
+
+
+def test_begin_credential_validation_returns_pending_mfa_challenge(
+    tmp_path: Path,
+) -> None:
+    """MFA challenges keep the validation client open with the Cognito session."""
+    hass = _hass(tmp_path)
+    challenge = {
+        "ChallengeName": "SMS_MFA",
+        "Session": "live-session",
+        "ChallengeParameters": {"CODE_DELIVERY_DESTINATION": "+*******9999"},
+    }
+
+    with patch("custom_components.drone_mobile.api.DroneMobileClient") as client_cls:
+        client = MagicMock()
+
+        def _authenticate(*, force_refresh: bool) -> object:
+            return client.auth._respond_to_mfa_challenge(challenge)
+
+        client.auth.authenticate.side_effect = _authenticate
+        client_cls.return_value = client
+
+        pending = begin_credential_validation(hass, "user@example.com", "secret")
+
+        assert isinstance(pending, PendingAuthChallenge)
+        assert pending.challenge_name == "SMS_MFA"
+        assert pending._challenge_response["Session"] == "live-session"
+        client.close.assert_not_called()
+
+        with patch(
+            "custom_components.drone_mobile.api.AuthenticationManager._respond_to_mfa_challenge",
+            return_value=object(),
+        ) as respond:
+            client.get_vehicles.return_value = [object(), object()]
+            assert pending.complete("123456") == 2
+
+        respond.assert_called_once_with(client.auth, challenge)
+        client.close.assert_called_once()

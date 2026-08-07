@@ -26,7 +26,7 @@ the submitted password without destroying a known-good runtime token when
 validation fails. Add setup and reauthentication tests proving that a wrong
 password is rejected even when valid cached tokens exist. -->
 
-### 2. Preserve the MFA challenge session between config-flow steps
+<!-- ### 2. Preserve the MFA challenge session between config-flow steps
 
 **Evidence:** `custom_components/drone_mobile/config_flow.py:49-61`,
 `custom_components/drone_mobile/config_flow.py:80-86`, and
@@ -43,7 +43,7 @@ first one.
 challenge object/session and later resume that exact challenge with the code.
 Keep that pending challenge only in config-flow memory, close it on abort, and
 cover SMS MFA, authenticator MFA, wrong codes, expired codes, and retries with
-Home Assistant config-flow tests.
+Home Assistant config-flow tests. -->
 
 ### 3. Add entities when vehicles or data become available after startup
 
