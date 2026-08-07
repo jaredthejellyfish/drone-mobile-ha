@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import DroneMobileCoordinator
-from .entity import DroneMobileEntity
+from .entity import DroneMobileEntity, async_setup_vehicle_entities
 
 
 async def async_setup_entry(
@@ -18,9 +18,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up DroneMobile switch entities."""
     coordinator: DroneMobileCoordinator = entry.runtime_data
-    async_add_entities(
-        DroneMobileEngineSwitch(coordinator, vehicle_id)
-        for vehicle_id in coordinator.data
+    async_setup_vehicle_entities(
+        entry,
+        coordinator,
+        async_add_entities,
+        lambda vehicle_id: [DroneMobileEngineSwitch(coordinator, vehicle_id)],
     )
 
 

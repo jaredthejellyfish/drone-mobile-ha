@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import DroneMobileCoordinator
-from .entity import DroneMobileEntity
+from .entity import DroneMobileEntity, async_setup_vehicle_entities
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -73,10 +73,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up DroneMobile command buttons."""
     coordinator: DroneMobileCoordinator = entry.runtime_data
-    async_add_entities(
-        DroneMobileCommandButton(coordinator, vehicle_id, description)
-        for vehicle_id in coordinator.data
-        for description in BUTTONS
+    async_setup_vehicle_entities(
+        entry,
+        coordinator,
+        async_add_entities,
+        lambda vehicle_id: (
+            DroneMobileCommandButton(coordinator, vehicle_id, description)
+            for description in BUTTONS
+        ),
     )
 
 

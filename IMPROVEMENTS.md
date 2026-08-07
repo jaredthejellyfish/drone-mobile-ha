@@ -45,7 +45,7 @@ Keep that pending challenge only in config-flow memory, close it on abort, and
 cover SMS MFA, authenticator MFA, wrong codes, expired codes, and retries with
 Home Assistant config-flow tests. -->
 
-### 3. Add entities when vehicles or data become available after startup
+<!-- ### 3. Add entities when vehicles or data become available after startup
 
 **Evidence:** `custom_components/drone_mobile/sensor.py:88-100`,
 `custom_components/drone_mobile/device_tracker.py:15-26`, and the one-time
@@ -65,7 +65,7 @@ tracker and sensors that the pinned library can actually populate for every
 initial vehicle, and let temporarily unavailable values report `unknown`.
 Remove or reserve battery-percentage and fuel-level definitions until the
 library can produce those values. Add tests for a missing initial location
-that appears later and for a vehicle added after setup.
+that appears later and for a vehicle added after setup. -->
 
 ### 4. Scope entity and device identifiers to an account
 

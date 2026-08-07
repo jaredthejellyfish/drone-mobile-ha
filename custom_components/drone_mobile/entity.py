@@ -2,13 +2,42 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from drone_mobile import VehicleInfo
 
 from .const import DOMAIN
 from .coordinator import DroneMobileCoordinator, DroneMobileVehicleData
+
+
+def async_setup_vehicle_entities(
+    entry: ConfigEntry,
+    coordinator: DroneMobileCoordinator,
+    async_add_entities: AddEntitiesCallback,
+    create_entities: Callable[[str], Iterable[Entity]],
+) -> None:
+    """Add entities for known vehicles and any vehicles discovered later."""
+    known_vehicle_ids: set[str] = set()
+
+    @callback
+    def _async_discover() -> None:
+        new_ids = set(coordinator.data) - known_vehicle_ids
+        if not new_ids:
+            return
+        known_vehicle_ids.update(new_ids)
+        async_add_entities(
+            entity for vehicle_id in new_ids for entity in create_entities(vehicle_id)
+        )
+
+    _async_discover()
+    entry.async_on_unload(coordinator.async_add_listener(_async_discover))
 
 
 class DroneMobileEntity(CoordinatorEntity[DroneMobileCoordinator]):

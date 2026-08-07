@@ -15,7 +15,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
-    PERCENTAGE,
     UnitOfElectricPotential,
     UnitOfLength,
     UnitOfTemperature,
@@ -26,7 +25,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from drone_mobile import VehicleStatus
 
 from .coordinator import DroneMobileCoordinator
-from .entity import DroneMobileEntity
+from .entity import DroneMobileEntity, async_setup_vehicle_entities
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -36,6 +35,7 @@ class DroneMobileSensorDescription(SensorEntityDescription):
     value_fn: Callable[[VehicleStatus], Any]
 
 
+# battery_percent and fuel_level are reserved until the library can populate them.
 SENSORS: tuple[DroneMobileSensorDescription, ...] = (
     DroneMobileSensorDescription(
         key="battery_voltage",
@@ -46,27 +46,12 @@ SENSORS: tuple[DroneMobileSensorDescription, ...] = (
         value_fn=lambda status: status.battery_voltage,
     ),
     DroneMobileSensorDescription(
-        key="battery_percent",
-        translation_key="battery_percent",
-        device_class=SensorDeviceClass.BATTERY,
-        native_unit_of_measurement=PERCENTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda status: status.battery_percent,
-    ),
-    DroneMobileSensorDescription(
         key="odometer",
         translation_key="odometer",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.MILES,
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda status: status.odometer,
-    ),
-    DroneMobileSensorDescription(
-        key="fuel_level",
-        translation_key="fuel_level",
-        native_unit_of_measurement=PERCENTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda status: status.fuel_level,
     ),
     DroneMobileSensorDescription(
         key="interior_temperature",
@@ -92,11 +77,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up DroneMobile sensors."""
     coordinator: DroneMobileCoordinator = entry.runtime_data
-    async_add_entities(
-        DroneMobileSensor(coordinator, vehicle_id, description)
-        for vehicle_id in coordinator.data
-        for description in SENSORS
-        if description.value_fn(coordinator.data[vehicle_id].status) is not None
+    async_setup_vehicle_entities(
+        entry,
+        coordinator,
+        async_add_entities,
+        lambda vehicle_id: (
+            DroneMobileSensor(coordinator, vehicle_id, description)
+            for description in SENSORS
+        ),
     )
 
 
