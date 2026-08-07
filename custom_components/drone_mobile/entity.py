@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
@@ -13,6 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from drone_mobile import VehicleInfo
 
+from .api import account_id
 from .const import DOMAIN
 from .coordinator import DroneMobileCoordinator, DroneMobileVehicleData
 
@@ -54,7 +56,10 @@ class DroneMobileEntity(CoordinatorEntity[DroneMobileCoordinator]):
         """Initialize the entity."""
         super().__init__(coordinator)
         self.vehicle_id = vehicle_id
-        self._attr_unique_id = f"{vehicle_id}_{key}"
+        # Scope IDs to the account so shared vehicles across config entries do
+        # not collide in the entity or device registries.
+        self._account_id = account_id(coordinator.config_entry.data[CONF_USERNAME])
+        self._attr_unique_id = f"{self._account_id}_{vehicle_id}_{key}"
 
     @property
     def vehicle_data(self) -> DroneMobileVehicleData:
@@ -72,7 +77,7 @@ class DroneMobileEntity(CoordinatorEntity[DroneMobileCoordinator]):
         info: VehicleInfo = self.vehicle_data.vehicle.info
         model = " ".join(part for part in (info.make, info.model) if part) or None
         return DeviceInfo(
-            identifiers={(DOMAIN, self.vehicle_id)},
+            identifiers={(DOMAIN, f"{self._account_id}_{self.vehicle_id}")},
             name=info.name,
             manufacturer="Firstech",
             model=model,

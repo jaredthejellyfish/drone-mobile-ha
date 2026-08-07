@@ -7,9 +7,10 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from drone_mobile import Location, Vehicle, VehicleInfo, VehicleStatus
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import CONF_USERNAME, UnitOfTemperature
 
 from custom_components.drone_mobile import device_tracker, lock, sensor
+from custom_components.drone_mobile.api import account_id
 from custom_components.drone_mobile.coordinator import DroneMobileVehicleData
 from custom_components.drone_mobile.device_tracker import DroneMobileVehicleTracker
 from custom_components.drone_mobile.entity import async_setup_vehicle_entities
@@ -18,6 +19,8 @@ from custom_components.drone_mobile.sensor import SENSORS, DroneMobileSensor
 
 VEHICLE_ID = "vehicle-123"
 NEW_VEHICLE_ID = "vehicle-456"
+USERNAME = "user@example.com"
+ACCOUNT_ID = account_id(USERNAME)
 
 
 def _vehicle_data(
@@ -56,6 +59,8 @@ def _mock_coordinator(data: dict[str, DroneMobileVehicleData]) -> MagicMock:
     """Build a coordinator that can notify discovery listeners."""
     coordinator = MagicMock()
     coordinator.data = data
+    coordinator.config_entry = MagicMock()
+    coordinator.config_entry.data = {CONF_USERNAME: USERNAME}
     listeners: list = []
     coordinator._listeners = listeners
 
@@ -93,6 +98,8 @@ def test_tracker_created_without_location_updates_when_available() -> None:
     coordinator = MagicMock()
     coordinator.data = {VEHICLE_ID: _vehicle_data(VEHICLE_ID)}
     coordinator.last_update_success = True
+    coordinator.config_entry = MagicMock()
+    coordinator.config_entry.data = {CONF_USERNAME: USERNAME}
     tracker = DroneMobileVehicleTracker(coordinator, VEHICLE_ID)
 
     assert tracker.latitude is None
@@ -131,8 +138,8 @@ def test_new_vehicle_adds_entities_after_setup() -> None:
     asyncio.run(device_tracker.async_setup_entry(MagicMock(), entry, added.extend))
 
     assert {entity.unique_id for entity in added} == {
-        f"{VEHICLE_ID}_doors",
-        f"{VEHICLE_ID}_location",
+        f"{ACCOUNT_ID}_{VEHICLE_ID}_doors",
+        f"{ACCOUNT_ID}_{VEHICLE_ID}_location",
     }
     assert len(coordinator._listeners) == 2
 
@@ -144,10 +151,10 @@ def test_new_vehicle_adds_entities_after_setup() -> None:
         listener()
 
     assert {entity.unique_id for entity in added} == {
-        f"{VEHICLE_ID}_doors",
-        f"{VEHICLE_ID}_location",
-        f"{NEW_VEHICLE_ID}_doors",
-        f"{NEW_VEHICLE_ID}_location",
+        f"{ACCOUNT_ID}_{VEHICLE_ID}_doors",
+        f"{ACCOUNT_ID}_{VEHICLE_ID}_location",
+        f"{ACCOUNT_ID}_{NEW_VEHICLE_ID}_doors",
+        f"{ACCOUNT_ID}_{NEW_VEHICLE_ID}_location",
     }
 
 

@@ -21,10 +21,14 @@ from .const import DOMAIN
 _AUTH_FILES = ("token.json", "device.json")
 
 
+def account_id(username: str) -> str:
+    """Return a stable, privacy-safe identifier for a DroneMobile username."""
+    return sha256(username.strip().lower().encode()).hexdigest()[:16]
+
+
 def token_directory(hass: HomeAssistant, username: str) -> Path:
     """Return an account-specific token directory inside Home Assistant storage."""
-    account_id = sha256(username.strip().lower().encode()).hexdigest()[:16]
-    return Path(hass.config.path(".storage", DOMAIN, account_id))
+    return Path(hass.config.path(".storage", DOMAIN, account_id(username)))
 
 
 def create_client(

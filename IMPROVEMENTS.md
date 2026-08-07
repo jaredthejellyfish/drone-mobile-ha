@@ -67,7 +67,7 @@ Remove or reserve battery-percentage and fuel-level definitions until the
 library can produce those values. Add tests for a missing initial location
 that appears later and for a vehicle added after setup. -->
 
-### 4. Scope entity and device identifiers to an account
+<!-- ### 4. Scope entity and device identifiers to an account
 
 **Evidence:** `custom_components/drone_mobile/config_flow.py:69-72` and
 `custom_components/drone_mobile/entity.py:19-28,40-52`.
@@ -82,7 +82,7 @@ and its vehicle device can merge with the first account's device.
 deduplicated across accounts. If each config entry should remain independent,
 prefix both entity unique IDs and device identifiers with a stable,
 privacy-safe account identifier. Add a two-entry test where both accounts
-return the same vehicle ID and verify deterministic registry behavior.
+return the same vehicle ID and verify deterministic registry behavior. -->
 
 ## Medium priority
 

@@ -8,11 +8,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 from drone_mobile import CommandResponse, Vehicle, VehicleInfo, VehicleStatus
+from homeassistant.const import CONF_USERNAME
 
+from custom_components.drone_mobile.api import account_id
 from custom_components.drone_mobile.binary_sensor import (
     DroneMobileRunningBinarySensor,
 )
 from custom_components.drone_mobile.const import (
+    DOMAIN,
     LOCATION_UPDATE_INTERVAL,
     PARKED_LOCATION_UPDATE_INTERVAL,
 )
@@ -28,9 +31,10 @@ from custom_components.drone_mobile.lock import DroneMobileDoorLock
 from custom_components.drone_mobile.switch import DroneMobileEngineSwitch
 
 VEHICLE_ID = "vehicle-123"
+USERNAME = "user@example.com"
 
 
-def make_coordinator() -> DroneMobileCoordinator:
+def make_coordinator(username: str = USERNAME) -> DroneMobileCoordinator:
     """Build a coordinator containing one representative vehicle."""
     info = VehicleInfo(
         vehicle_id=VEHICLE_ID,
@@ -58,6 +62,8 @@ def make_coordinator() -> DroneMobileCoordinator:
         VEHICLE_ID: DroneMobileVehicleData(vehicle=vehicle, status=status)
     }
     coordinator.last_update_success = True
+    coordinator.config_entry = MagicMock()
+    coordinator.config_entry.data = {CONF_USERNAME: username}
     return coordinator
 
 
@@ -73,12 +79,34 @@ def test_vehicle_state_entities() -> None:
 def test_vehicle_tracker_and_device_info() -> None:
     """Location and vehicle metadata are exposed in Home Assistant form."""
     tracker = DroneMobileVehicleTracker(make_coordinator(), VEHICLE_ID)
+    scoped_id = account_id(USERNAME)
 
     assert tracker.latitude == 42.36
     assert tracker.longitude == -71.06
+    assert tracker.unique_id == f"{scoped_id}_{VEHICLE_ID}_location"
+    assert tracker.device_info["identifiers"] == {(DOMAIN, f"{scoped_id}_{VEHICLE_ID}")}
     assert tracker.device_info["manufacturer"] == "Firstech"
     assert tracker.device_info["model"] == "Toyota RAV4"
     assert tracker.device_info["serial_number"] == "TESTVIN"
+    assert USERNAME not in tracker.unique_id
+    assert USERNAME not in str(tracker.device_info["identifiers"])
+
+
+def test_shared_vehicle_ids_are_scoped_per_account() -> None:
+    """Two accounts sharing a vehicle ID keep distinct entity and device IDs."""
+    first = DroneMobileVehicleTracker(make_coordinator("alice@example.com"), VEHICLE_ID)
+    second = DroneMobileVehicleTracker(make_coordinator("bob@example.com"), VEHICLE_ID)
+
+    assert first.unique_id != second.unique_id
+    assert first.device_info["identifiers"] != second.device_info["identifiers"]
+    assert first.unique_id == f"{account_id('alice@example.com')}_{VEHICLE_ID}_location"
+    assert second.unique_id == f"{account_id('bob@example.com')}_{VEHICLE_ID}_location"
+    assert first.device_info["identifiers"] == {
+        (DOMAIN, f"{account_id('alice@example.com')}_{VEHICLE_ID}")
+    }
+    assert second.device_info["identifiers"] == {
+        (DOMAIN, f"{account_id('bob@example.com')}_{VEHICLE_ID}")
+    }
 
 
 def test_command_expectations_match_refreshed_state() -> None:

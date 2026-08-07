@@ -10,6 +10,7 @@ from drone_mobile import InvalidCredentialsError
 
 from custom_components.drone_mobile.api import (
     PendingAuthChallenge,
+    account_id,
     begin_credential_validation,
     create_client,
     token_directory,
@@ -24,6 +25,14 @@ def _hass(tmp_path: Path) -> MagicMock:
     return hass
 
 
+def test_account_id_is_stable_and_privacy_safe() -> None:
+    """Account IDs are deterministic and do not embed the username."""
+    assert account_id("USER@example.com ") == account_id("user@example.com")
+    assert account_id("user@example.com") != account_id("other@example.com")
+    assert "user@example.com" not in account_id("user@example.com")
+    assert len(account_id("user@example.com")) == 16
+
+
 def test_token_directory_is_stable_and_account_specific(tmp_path: Path) -> None:
     """Credentials for separate accounts cannot overwrite one another."""
     hass = _hass(tmp_path)
@@ -35,6 +44,7 @@ def test_token_directory_is_stable_and_account_specific(tmp_path: Path) -> None:
     assert first == same
     assert first != second
     assert first.parent == tmp_path / ".storage" / "drone_mobile"
+    assert first.name == account_id("user@example.com")
     assert "user@example.com" not in str(first)
 
 
