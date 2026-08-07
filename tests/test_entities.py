@@ -11,8 +11,10 @@ from custom_components.drone_mobile.binary_sensor import (
 )
 from custom_components.drone_mobile.coordinator import (
     COMMAND_EXPECTATIONS,
+    LOCATION_COMMAND,
     DroneMobileCoordinator,
     DroneMobileVehicleData,
+    _request_location,
 )
 from custom_components.drone_mobile.device_tracker import DroneMobileVehicleTracker
 from custom_components.drone_mobile.lock import DroneMobileDoorLock
@@ -83,3 +85,13 @@ def test_command_expectations_match_refreshed_state() -> None:
     assert matches(coordinator, VEHICLE_ID, "unlock") is False
     assert matches(coordinator, VEHICLE_ID, "trunk") is True
     assert set(COMMAND_EXPECTATIONS) == {"start", "stop", "lock", "unlock"}
+
+
+def test_location_uses_controller_command() -> None:
+    """Location requests use the API's controller command syntax."""
+    client = MagicMock()
+    expected = MagicMock()
+    client.send_command.return_value = expected
+
+    assert _request_location(client, "device-key") is expected
+    client.send_command.assert_called_once_with("device-key", LOCATION_COMMAND, "2")

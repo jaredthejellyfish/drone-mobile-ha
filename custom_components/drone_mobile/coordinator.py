@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryAuthFailed
@@ -21,6 +22,7 @@ from drone_mobile import (
     Vehicle,
     VehicleStatus,
 )
+from drone_mobile.const import AVAILABLE_COMMANDS, DEVICE_TYPE_CONTROLLER
 
 from .const import COMMAND_REFRESH_RETRY_INTERVALS, DEFAULT_UPDATE_INTERVAL, DOMAIN
 
@@ -48,6 +50,21 @@ COMMAND_EXPECTATIONS: dict[str, tuple[str, bool]] = {
     "lock": ("is_locked", True),
     "unlock": ("is_locked", False),
 }
+
+LOCATION_COMMAND = "A30"
+
+
+def _request_location(client: DroneMobileClient, device_key: str) -> CommandResponse:
+    """Request location using the controller command expected by the API."""
+    # drone_mobile 0.3+ changed this to the rejected LOCATION vehicle command.
+    # A30 with the controller device type is the package's last known working
+    # command syntax. Add it to the library allowlist before sending it.
+    AVAILABLE_COMMANDS.add(LOCATION_COMMAND)
+    return client.send_command(
+        device_key,
+        LOCATION_COMMAND,
+        DEVICE_TYPE_CONTROLLER,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +179,15 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
                 translation_domain=DOMAIN,
                 translation_key="invalid_command",
             )
-        command: Any = getattr(vehicle_data.vehicle, method)
+        command: Any
+        if method == "get_location":
+            command = partial(
+                _request_location,
+                self.client,
+                vehicle_data.vehicle.device_key,
+            )
+        else:
+            command = getattr(vehicle_data.vehicle, method)
 
         try:
             response = await self.hass.async_add_executor_job(command)

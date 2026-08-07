@@ -9,5 +9,5 @@
   "issue_tracker": "https://github.com/jaredthejellyfish/drone-mobile-ha/issues",
   "loggers": ["drone_mobile"],
   "requirements": ["drone_mobile==0.4.1"],
-  "version": "0.1.2"
+  "version": "0.1.3"
 }
