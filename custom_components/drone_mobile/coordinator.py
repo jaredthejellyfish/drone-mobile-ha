@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -102,10 +103,23 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
             update_interval=DEFAULT_UPDATE_INTERVAL,
         )
         self.client = client
+        self._client_lock = asyncio.Lock()
+        self._client_closed = False
         self._command_refresh_cancels: dict[str, Callable[[], None]] = {}
         self._location_update_cancel: Callable[[], None] | None = None
         self._location_refresh_cancel: Callable[[], None] | None = None
         self._last_location_request: dict[str, datetime] = {}
+
+    async def _async_call_client(self, func: Callable[..., Any], *args: Any) -> Any:
+        """Run a blocking client call, serialized against other client work."""
+        async with self._client_lock:
+            if self._client_closed:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="command_failed",
+                    translation_placeholders={"error": "Client is closed"},
+                )
+            return await self.hass.async_add_executor_job(func, *args)
 
     def async_start_location_updates(self) -> None:
         """Request fresh GPS locations at the configured interval."""
@@ -154,7 +168,7 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
     ) -> bool:
         """Request one vehicle's location and record successful requests."""
         try:
-            response = await self.hass.async_add_executor_job(
+            response = await self._async_call_client(
                 _request_location,
                 self.client,
                 vehicle_data.vehicle.device_key,
@@ -244,7 +258,7 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
         _schedule_next()
 
     async def async_shutdown(self) -> None:
-        """Cancel pending command refreshes and shut down the coordinator."""
+        """Cancel timers, wait for in-flight client work, then close the client."""
         self._cancel_command_refreshes()
         if self._location_update_cancel is not None:
             self._location_update_cancel()
@@ -252,6 +266,10 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
         if self._location_refresh_cancel is not None:
             self._location_refresh_cancel()
             self._location_refresh_cancel = None
+        async with self._client_lock:
+            if not self._client_closed:
+                await self.hass.async_add_executor_job(self.client.close)
+                self._client_closed = True
         await super().async_shutdown()
 
     def _fetch_vehicles(self) -> dict[str, DroneMobileVehicleData]:
@@ -268,7 +286,7 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
     async def _async_update_data(self) -> dict[str, DroneMobileVehicleData]:
         """Fetch the latest account data."""
         try:
-            return await self.hass.async_add_executor_job(self._fetch_vehicles)
+            return await self._async_call_client(self._fetch_vehicles)
         except AuthenticationError as err:
             raise ConfigEntryAuthFailed from err
         except DroneMobileException as err:
@@ -301,7 +319,7 @@ class DroneMobileCoordinator(DataUpdateCoordinator[dict[str, DroneMobileVehicleD
             command = getattr(vehicle_data.vehicle, method)
 
         try:
-            response = await self.hass.async_add_executor_job(command)
+            response = await self._async_call_client(command)
         except AuthenticationError as err:
             if self.config_entry:
                 self.config_entry.async_start_reauth_if_available(self.hass)

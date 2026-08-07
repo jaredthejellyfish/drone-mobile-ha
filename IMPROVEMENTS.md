@@ -86,7 +86,7 @@ return the same vehicle ID and verify deterministic registry behavior. -->
 
 ## Medium priority
 
-### 5. Serialize access to the shared blocking client
+<!-- ### 5. Serialize access to the shared blocking client
 
 **Evidence:** `custom_components/drone_mobile/coordinator.py:150-201`,
 `custom_components/drone_mobile/coordinator.py:257-275`, and
@@ -101,7 +101,7 @@ or shutdown.
 **Improvement:** serialize all client calls with one coordinator-owned
 `asyncio.Lock`, or move to a library client that explicitly supports concurrent
 async use. Ensure unload waits for tracked in-flight client work before closing
-the client. Test an overlapping refresh, location request, and command.
+the client. Test an overlapping refresh, location request, and command. -->
 
 ### 6. Make active GPS polling configurable and rate-limit aware
 

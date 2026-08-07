@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 from drone_mobile import CommandResponse, Vehicle, VehicleInfo, VehicleStatus
@@ -166,7 +166,13 @@ def test_successful_location_request_records_time() -> None:
         hass=hass,
         client=MagicMock(),
         config_entry=None,
+        _client_lock=asyncio.Lock(),
+        _client_closed=False,
         _last_location_request={},
+    )
+    coordinator._async_call_client = MethodType(
+        DroneMobileCoordinator._async_call_client,
+        coordinator,
     )
 
     success = asyncio.run(
@@ -180,3 +186,175 @@ def test_successful_location_request_records_time() -> None:
     assert success is True
     hass.async_add_executor_job.assert_awaited_once()
     assert coordinator._last_location_request[VEHICLE_ID] == now
+
+
+def test_client_calls_are_serialized() -> None:
+    """Refresh, location, and command work never overlap on the shared client."""
+
+    async def _run() -> None:
+        active = 0
+        max_active = 0
+        started = asyncio.Event()
+        release = asyncio.Event()
+        entered = 0
+        vehicle_data = make_coordinator().data[VEHICLE_ID]
+        vehicles = {VEHICLE_ID: vehicle_data}
+        lock_response = CommandResponse(
+            success=True,
+            message="ok",
+            command="lock",
+            device_key="device-key",
+        )
+        location_response = CommandResponse(
+            success=True,
+            message="ok",
+            command=LOCATION_COMMAND,
+            device_key="device-key",
+        )
+
+        def fetch_vehicles() -> dict[str, DroneMobileVehicleData]:
+            return vehicles
+
+        def lock_command() -> CommandResponse:
+            return lock_response
+
+        vehicle_data.vehicle.lock = lock_command
+
+        async def fake_executor(func, *args):
+            nonlocal active, max_active, entered
+            entered += 1
+            active += 1
+            max_active = max(max_active, active)
+            if entered == 1:
+                started.set()
+            await release.wait()
+            active -= 1
+            if func is fetch_vehicles:
+                return vehicles
+            if func is _request_location:
+                return location_response
+            if func is lock_command:
+                return lock_response
+            raise AssertionError(f"unexpected client call: {func!r}")
+
+        hass = MagicMock()
+        hass.async_add_executor_job = fake_executor
+        coordinator = SimpleNamespace(
+            hass=hass,
+            client=MagicMock(),
+            config_entry=None,
+            data=vehicles,
+            _client_lock=asyncio.Lock(),
+            _client_closed=False,
+            _last_location_request={},
+            _fetch_vehicles=fetch_vehicles,
+            async_request_refresh=AsyncMock(),
+            _command_state_matches=lambda *_args: True,
+            _cancel_command_refreshes=MagicMock(),
+            _schedule_command_refreshes=MagicMock(),
+        )
+        coordinator._async_call_client = MethodType(
+            DroneMobileCoordinator._async_call_client,
+            coordinator,
+        )
+
+        refresh = asyncio.create_task(
+            DroneMobileCoordinator._async_update_data(coordinator)
+        )
+        await started.wait()
+        location = asyncio.create_task(
+            DroneMobileCoordinator._async_request_vehicle_location(
+                coordinator,
+                vehicle_data,
+                datetime.now(UTC),
+            )
+        )
+        command = asyncio.create_task(
+            DroneMobileCoordinator.async_execute_command(
+                coordinator,
+                VEHICLE_ID,
+                "lock",
+            )
+        )
+        # Give the queued callers a chance to contend for the lock.
+        await asyncio.sleep(0)
+        assert entered == 1
+        assert max_active == 1
+        release.set()
+        await asyncio.gather(refresh, location, command)
+        assert entered == 3
+        assert max_active == 1
+
+    asyncio.run(_run())
+
+
+def test_shutdown_waits_for_in_flight_client_work() -> None:
+    """Unload closes the client only after in-flight executor work finishes."""
+
+    async def _run() -> None:
+        started = asyncio.Event()
+        release = asyncio.Event()
+        closed_before_release = False
+        vehicles = {VEHICLE_ID: make_coordinator().data[VEHICLE_ID]}
+
+        def fetch_vehicles() -> dict[str, DroneMobileVehicleData]:
+            return vehicles
+
+        client = MagicMock()
+
+        async def fake_executor(func, *args):
+            nonlocal closed_before_release
+            if func is client.close:
+                closed_before_release = not release.is_set()
+                return None
+            assert func is fetch_vehicles
+            started.set()
+            await release.wait()
+            return vehicles
+
+        hass = MagicMock()
+        hass.async_add_executor_job = fake_executor
+        coordinator = SimpleNamespace(
+            hass=hass,
+            client=client,
+            _client_lock=asyncio.Lock(),
+            _client_closed=False,
+            _command_refresh_cancels={},
+            _location_update_cancel=None,
+            _location_refresh_cancel=None,
+            _fetch_vehicles=fetch_vehicles,
+            _cancel_command_refreshes=MagicMock(),
+        )
+        coordinator._async_call_client = MethodType(
+            DroneMobileCoordinator._async_call_client,
+            coordinator,
+        )
+
+        refresh = asyncio.create_task(
+            DroneMobileCoordinator._async_update_data(coordinator)
+        )
+        await started.wait()
+        shutdown = asyncio.create_task(_async_shutdown_without_super(coordinator))
+        await asyncio.sleep(0)
+        assert coordinator._client_closed is False
+        release.set()
+        await refresh
+        await shutdown
+        assert coordinator._client_closed is True
+        assert closed_before_release is False
+
+    async def _async_shutdown_without_super(coordinator: SimpleNamespace) -> None:
+        """Mirror async_shutdown's client drain/close without the HA base class."""
+        coordinator._cancel_command_refreshes()
+        if coordinator._location_update_cancel is not None:
+            coordinator._location_update_cancel()
+            coordinator._location_update_cancel = None
+        if coordinator._location_refresh_cancel is not None:
+            coordinator._location_refresh_cancel()
+            coordinator._location_refresh_cancel = None
+        async with coordinator._client_lock:
+            if not coordinator._client_closed:
+                await coordinator.hass.async_add_executor_job(coordinator.client.close)
+                coordinator._client_closed = True
+
+    asyncio.run(_run())

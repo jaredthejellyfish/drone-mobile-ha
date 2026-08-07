@@ -39,5 +39,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator: DroneMobileCoordinator = entry.runtime_data
     await coordinator.async_shutdown()
-    await hass.async_add_executor_job(coordinator.client.close)
     return True
