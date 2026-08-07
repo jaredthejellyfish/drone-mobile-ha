@@ -6,7 +6,7 @@ below are runtime, safety, and coverage gaps that those checks do not catch.
 
 ## High priority
 
-### 1. Force credential validation to use the submitted password
+<!-- ### 1. Force credential validation to use the submitted password
 
 **Evidence:** `custom_components/drone_mobile/config_flow.py:49-61`,
 `custom_components/drone_mobile/api.py:22-34`, and
@@ -24,7 +24,7 @@ the cached token can no longer be refreshed.
 to the library and use it from the flow. Validation should authenticate with
 the submitted password without destroying a known-good runtime token when
 validation fails. Add setup and reauthentication tests proving that a wrong
-password is rejected even when valid cached tokens exist.
+password is rejected even when valid cached tokens exist. -->
 
 ### 2. Preserve the MFA challenge session between config-flow steps
 

@@ -17,7 +17,7 @@ from drone_mobile import (
     NetworkError,
 )
 
-from .api import create_client
+from .api import validate_credentials
 from .const import CONF_MFA_CODE, DOMAIN
 
 
@@ -52,13 +52,9 @@ class DroneMobileConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         password: str,
         mfa_code: str | None = None,
     ) -> int:
-        """Validate credentials with the blocking API client."""
+        """Validate credentials with a forced password login."""
         callback = (lambda _challenge: mfa_code) if mfa_code is not None else None
-        client = create_client(self.hass, username, password, callback)
-        try:
-            return len(client.get_vehicles())
-        finally:
-            client.close()
+        return validate_credentials(self.hass, username, password, callback)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
